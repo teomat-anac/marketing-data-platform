@@ -58,9 +58,25 @@ Notes:
 | **Funnel** | The sequence of steps to a purchase (visit → view product → cart → checkout → purchase) and how many visits reach each step. This project counts sessions, not users (D12). |
 | **Open funnel** | A session counts at a step if it reached that step, whether or not it went through the earlier steps. A *closed* funnel counts only sessions that took the steps in order. This project uses the open funnel (D12). |
 | **UTM** | Parameters added to campaign links (`utm_source`, `utm_medium`, `utm_campaign`) from which GA4 derives source/medium/campaign. |
-| **Paid / Organic** | Paid = traffic you pay for (ads). Organic = free traffic from search results. |
+| **Paid / Organic** | Paid = traffic you pay for (ads, commissions). Organic = free traffic: search results, social posts, videos. In this project `is_paid` is true only for channels with ad cost data, so only for Paid Search. |
+
+### Channels
+
+The nine channels in this project, with GA4's default names (D19). The rules that assign them are in `data-sources.md` §5.
+
+| Channel | Meaning |
+|---|---|
+| **Direct** | The visitor typed the address, used a bookmark, or the origin was lost (e.g. a link in an app). With last non-direct click, a session stays Direct only if the user had no earlier non-direct visit within the lookback window: it means "not traceable to any marketing". |
 | **Paid Search** | Visits from ads on a search engine's results page, bought per click (CPC). In GA4: `google / cpc`. The only paid channel in this project's data. |
-| **Affiliates / Display** | Two other paid channels. *Affiliates*: partner sites that send traffic, usually paid a commission on sales. *Display*: banner ads on other sites (e.g. Google's display network). |
+| **Organic Search** | Visits from unpaid search results (medium `organic`), earned through SEO. |
+| **Organic Social** | Visits from unpaid links on social networks (Facebook, Instagram, LinkedIn, X/Twitter, Reddit…). |
+| **Organic Video** | Visits from video platforms without ads; here YouTube. |
+| **Referral** | Visits from a link on another website: a blog, a review site, a partner page. |
+| **Email** | Visits from a link in an email, e.g. a newsletter. Email tools cost money, but there is no cost data for them, so the channel is unpaid here. |
+| **Affiliates** | Visits from partner sites that are usually paid a commission on sales. Unpaid here (`is_paid` false): the sample has no cost for them and only 2 orders, so a ROAS would be noise (`data-sources.md` §5). |
+| **Unassigned** | See above: traffic that matches no rule, here mostly the sample's hidden sources. A data-quality signal, not a marketing channel. |
+
+Other GA4 channels not in this data: **Paid Social** (ads on social networks), **Display** (banner ads on other sites, e.g. Google's display network), **Paid Video** and **Paid Shopping**. Adding one is a change to the channel rules (`data-sources.md` §5).
 
 ### Analytics tools
 

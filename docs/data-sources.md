@@ -288,6 +288,8 @@ GA4's default channel names, for the nine found in the data (D19). Applied to a 
 
 The list and the site lists are a dbt seed, so a client can change them (US-7).
 
+**Known limitation: the rules fit this sample's paid traffic only.** Its only paid medium is `google / cpc`, so rule 2 sends *any* source with medium `cpc` to Paid Search, and rule 4 sends a social source with *any* medium to Organic Social. GA4's defaults are stricter: Paid Search needs a search-engine source and Paid Social a social source, each with a paid medium (`cpc`, `ppc`, `paid…`, `retargeting`). For a client running social ads, `facebook.com / cpc` would land in Paid Search and `facebook.com / paid_social` in Organic Social. The fix is data, not code: a Paid Social rule before rules 2 and 4, Paid Search limited to search engines, and Paid Social added to the channel list with `is_paid = true` (issue #1).
+
 ### Final figures (E20, E21): 1 Nov 2020 – 24 Jan 2021, all rules applied
 | Channel | Sessions | Own-source sessions | Orders | Orders without amount | Revenue |
 |---|---|---|---|---|---|
