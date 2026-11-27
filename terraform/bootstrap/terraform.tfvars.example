@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) and set your own project.
+project_id  = "your-project-id"
+environment = "dev"
+region      = "us-central1"

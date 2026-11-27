@@ -1,0 +1,27 @@
+# Cloud Build: builds the API image from the Dockerfile and pushes it to Artifact
+# Registry. How to run it (from the repo root): api/README.md, "Build and deploy".
+#
+# The image is tagged with the commit it was built from (_TAG, required).
+# Logs go to Cloud Logging only: a build that runs as its own service account
+# (mdp-build) can't use Google's default logs bucket.
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker:29@sha256:029c3630186d0e7b205524327c66de04ebb067a842d9f9f7e332364a44524d1e
+    args:
+      - build
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/api:${_TAG}
+      - .
+
+# Pushed by Cloud Build once every step has succeeded.
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/api:${_TAG}
+
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: mdp
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  # Fail on a missing or unknown substitution: no _TAG, or a typo in a name.
+  substitutionOption: MUST_MATCH

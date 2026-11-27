@@ -1,0 +1,17 @@
+# What `gcloud builds submit api` uploads to the build bucket: only what the
+# Dockerfile needs (an allow-list). Nothing else on the laptop goes, whatever
+# appears in api/ later: no .env or key files, caches, tests or virtualenv.
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+src/**/__pycache__/
+
+# Credentials never go, even inside src/ (same patterns as the root .gitignore).
+.env
+.env.*
+*credentials*.json
+*-key.json
+service-account*.json

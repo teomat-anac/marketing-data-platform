@@ -1,0 +1,82 @@
+models:
+  - name: int_ga4__orders
+    description: >
+      One row per order (D17): duplicate purchase events removed, colliding IDs of different
+      users kept apart, purchases without an ID or amount counted. Covers the events' window
+      (D39); int_ga4__sessions keeps the orders of sessions that started inside the range.
+    columns:
+      - name: order_key
+        description: Unique order key, user and transaction_id; for orders without an ID, the session, event time and a counter.
+        data_tests: [unique, not_null]
+      - name: session_key
+        description: Session the order was placed in.
+        data_tests: [not_null]
+      - name: user_pseudo_id
+        description: Pseudonymous ID of the browser or device.
+      - name: transaction_id
+        description: GA4 order ID; NULL for purchases recorded without one.
+      - name: ordered_at
+        description: When the purchase event was recorded (UTC).
+        data_tests: [not_null]
+      - name: revenue
+        description: Order revenue in USD, without tax, rounded to cents; 0 when not recorded.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: is_revenue_missing
+        description: >
+          True when the purchase has no amount or an amount of 0; it counts with revenue 0
+          (D17). In the sample, purchases recorded at 0 have no item revenue either (E6).
+          The "206 orders without a recorded amount" in data-sources.md count these.
+
+  - name: int_ga4__sessions
+    description: >
+      One row per session started inside the data range: its own channel and attributed
+      channel (D16), orders and revenue (D17), and the funnel steps it reached (D12).
+    columns:
+      - name: session_key
+        description: Unique session key, user_pseudo_id and ga_session_id.
+        data_tests: [unique, not_null]
+      - name: user_pseudo_id
+        description: Pseudonymous ID of the browser or device.
+        data_tests: [not_null]
+      - name: session_number
+        description: The user's session count; 1 for their first session.
+      - name: session_date
+        description: Day the session started; its orders belong to this day.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "date '{{ var(\"start_date\") }}'"
+                max_value: "date '{{ var(\"end_date\") }}'"
+      - name: started_at
+        description: Time of the session's first event (UTC).
+      - name: own_source
+        description: Source of the visit itself after the D16 rules; NULL when it has none.
+      - name: own_medium
+        description: Medium of the visit itself after the D16 rules; NULL when it has none.
+      - name: own_channel
+        description: Channel of the visit itself (what brought it). The cost generator counts paid clicks from this.
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('channels'), field: channel}}
+      - name: channel
+        description: Attributed channel, last non-direct click (D16). The marts use this one.
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('channels'), field: channel}}
+      - name: orders
+        description: Orders placed in the session (D17).
+        data_tests: [not_null]
+      - name: revenue
+        description: Revenue of those orders, USD.
+        data_tests: [not_null]
+      - name: reached_view_item
+        description: The session viewed a product.
+      - name: reached_add_to_cart
+        description: The session added to cart.
+      - name: reached_begin_checkout
+        description: The session began checkout.
+      - name: reached_purchase
+        description: The session placed at least one order.

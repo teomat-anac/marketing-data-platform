@@ -1,0 +1,10 @@
+rule_order,channel,source_pattern,medium_pattern
+1,Direct,^([(]direct[)])?$,^([(]none[)]|[(]not set[)])?$
+2,Paid Search,.*,^cpc$
+3,Organic Search,.*,^organic$
+4,Organic Social,^(l[.]|m[.]|lm[.]|www[.])?(facebook|instagram|linkedin|twitter|reddit|pinterest|quora|tiktok|messenger)[.]com$|^t[.]co$|^lnkd[.]in$,.*
+5,Organic Video,^(m[.]|www[.])?youtube[.]com$,.*
+6,Referral,.*,^referral$
+7,Email,.*,^email$
+8,Affiliates,.*,^affiliate$
+9,Unassigned,.*,.*

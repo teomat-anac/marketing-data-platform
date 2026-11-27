@@ -1,0 +1,33 @@
+models:
+  - name: stg_ga4__events
+    description: >
+      One row per GA4 event, flattened and typed, from `attribution_lookback_days` before the
+      data range to one day after it (D39). A view:
+      it stores nothing, and each query on it scans the GA4 sample (about 1.6 GB).
+    columns:
+      - name: event_date
+        description: Day of the event, in the property's time zone.
+      - name: event_at
+        description: When the event happened (UTC).
+      - name: event_name
+        description: GA4 event name, e.g. session_start, view_item, purchase.
+      - name: user_pseudo_id
+        description: Pseudonymous ID of a browser or device.
+      - name: ga_session_id
+        description: GA4 session ID; unique only together with user_pseudo_id.
+      - name: ga_session_number
+        description: The user's session count; 1 for their first session.
+      - name: session_key
+        description: Unique session key, user_pseudo_id and ga_session_id joined with "-".
+      - name: source
+        description: Traffic source of this visit, when the event carries one.
+      - name: medium
+        description: Traffic medium of this visit, when the event carries one.
+      - name: first_user_source
+        description: Source of the user's first visit (GA4 traffic_source, first touch).
+      - name: first_user_medium
+        description: Medium of the user's first visit (GA4 traffic_source, first touch).
+      - name: transaction_id
+        description: Order ID on purchase events; NULL when missing ('(not set)' or empty).
+      - name: purchase_revenue_usd
+        description: Order revenue in USD, without tax, on purchase events.

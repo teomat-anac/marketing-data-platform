@@ -1,0 +1,61 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(terraform version:*)",
+      "Bash(terraform -version:*)",
+      "Bash(terraform init:*)",
+      "Bash(terraform fmt:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform plan:*)",
+      "Bash(terraform providers:*)",
+      "Bash(terraform output:*)",
+      "Bash(gcloud version:*)",
+      "Bash(gcloud --version:*)",
+      "Bash(gcloud config list:*)",
+      "Bash(gcloud auth list:*)",
+      "Bash(gcloud projects describe:*)",
+      "Bash(bq ls:*)",
+      "Bash(bq show:*)",
+      "Bash(bq query --maximum_bytes_billed:*)",
+      "Bash(dbt parse:*)",
+      "Bash(dbt compile:*)",
+      "Bash(dbt ls:*)",
+      "Bash(dbt debug:*)",
+      "Bash(uv run dbt parse:*)",
+      "Bash(uv run dbt compile:*)",
+      "Bash(uv run dbt ls:*)",
+      "Bash(uv run dbt debug:*)",
+      "Bash(uv run dbt deps:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "ask": [
+      "Bash(terraform apply:*)",
+      "Bash(terraform destroy:*)",
+      "Bash(terraform import:*)",
+      "Bash(terraform state:*)",
+      "Bash(terraform force-unlock:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(gcloud run jobs:*)",
+      "Bash(gcloud builds submit:*)",
+      "Bash(gcloud services enable:*)",
+      "Bash(gcloud services disable:*)",
+      "Bash(gcloud projects add-iam-policy-binding:*)",
+      "Bash(gcloud projects remove-iam-policy-binding:*)",
+      "Bash(gcloud projects set-iam-policy:*)",
+      "Bash(gcloud iam:*)",
+      "Bash(bq mk:*)",
+      "Bash(bq rm:*)",
+      "Bash(docker push:*)"
+    ],
+    "deny": [
+      "Read(./**/.env)",
+      "Read(./**/*.tfstate)",
+      "Read(./**/*.tfstate.backup)",
+      "Read(~/.config/gcloud/**)"
+    ]
+  }
+}

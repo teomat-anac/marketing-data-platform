@@ -1,0 +1,21 @@
+# Connection to BigQuery. No secrets: `oauth` uses the gcloud application-default
+# credentials (ADC) of whoever runs dbt. dbt looks for this file in the current directory
+# first, so run dbt from pipeline/dbt/.
+mdp:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      # The GCP project, required (the one in terraform/envs/dev/terraform.tfvars). No default:
+      # the repo names no project.
+      project: "{{ env_var('MDP_GCP_PROJECT') }}"
+      # Default dataset. Every model and seed sets its own (dbt_project.yml), so nothing lands here.
+      dataset: staging
+      location: US # D7: the GA4 sample is in US
+      threads: 4
+      priority: interactive
+      # Cost cap per query (docs/costs.md §1): one scan of the GA4 sample is about 1.64 GB.
+      maximum_bytes_billed: 3000000000
+      job_execution_timeout_seconds: 300
+      job_retries: 1

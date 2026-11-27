@@ -1,0 +1,45 @@
+# dbt project of the marketing data platform: GA4 events and ad costs → marts.
+# Layers and rules: docs/architecture.md §2-3; data rules: docs/data-sources.md §5.
+name: mdp
+version: "0.1.0"
+config-version: 2
+profile: mdp
+require-dbt-version: [">=1.12.0", "<1.13.0"]
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+flags:
+  send_anonymous_usage_stats: false
+
+# Settings a client may change without touching SQL (US-7).
+vars:
+  # Data range (D18): sessions that start on these days, both included.
+  start_date: "2020-11-01"
+  end_date: "2021-01-24"
+  # The shop's own domains: a source containing one of them is a self-referral and is ignored (D16).
+  self_referral_domains: ["googlemerchandisestore.com"]
+  # A Direct session inherits the user's last non-direct channel from at most this many days earlier (D16).
+  attribution_lookback_days: 90
+
+models:
+  mdp:
+    # Model and column descriptions are copied to BigQuery, so they show in the console.
+    +persist_docs: {relation: true, columns: true}
+    # Every layer is a Terraform dataset; generate_schema_name writes to these exact names.
+    staging:
+      +schema: staging
+      +materialized: view # D6: free to store, always current
+    intermediate:
+      +schema: intermediate
+      +materialized: table # GA4 is scanned once per build, not by every mart and test
+    marts:
+      +schema: marts
+      +materialized: table # D6: fast, cheap reads for the API
+
+seeds:
+  mdp:
+    +schema: raw # hand-kept inputs, like the data the sources deliver

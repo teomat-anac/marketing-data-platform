@@ -1,0 +1,80 @@
+models:
+  - name: mart_channel_daily
+    description: >
+      KPIs per day × channel (architecture.md §2, D22): additive values only, zero-filled
+      for every day and channel (D13). Ratios (ROAS, CPA, conversion rate) are computed on
+      request from the sums for the period (FR-7). Read by the API (D8).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [date, channel]}
+      - dbt_utils.expression_is_true:
+          arguments: {expression: "is_paid or (clicks = 0 and impressions = 0 and spend = 0)"}
+          description: "Channels that aren't paid have no ad cost."
+    columns:
+      - name: date
+        description: Day the sessions started.
+        data_tests: [not_null]
+      - name: channel
+        description: Channel (D19).
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('channels'), field: channel}}
+      - name: is_paid
+        description: True for paid channels (here only Paid Search).
+        data_tests: [not_null]
+      - name: sessions
+        description: Sessions credited to the channel (D16).
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: orders
+        description: Unique orders (D17).
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: revenue
+        description: Order revenue in USD, without tax, before refunds (D17).
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: clicks
+        description: Ad clicks; 0 for channels that aren't paid.
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: impressions
+        description: Ad impressions; 0 for channels that aren't paid.
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: spend
+        description: Ad cost in USD; 0 for channels that aren't paid.
+        data_tests: [not_null, {dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+
+  - name: mart_funnel_daily
+    description: >
+      Open funnel per day × channel × step (D12): sessions that reached each step. A step
+      not recorded on a day (D20) has `sessions` NULL and `is_tracked` false. Zero-filled
+      for every day, channel and step (D13). Read by the API (D8).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [date, channel, step]}
+      - dbt_utils.expression_is_true:
+          arguments: {expression: "is_tracked = (sessions is not null)"}
+          description: "A step is either recorded with a count, or not recorded with NULL."
+    columns:
+      - name: date
+        description: Day the sessions started.
+        data_tests: [not_null]
+      - name: channel
+        description: Attributed channel (D16, D19).
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('channels'), field: channel}}
+      - name: step
+        description: Funnel step.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [visit, view_item, add_to_cart, begin_checkout, purchase]}
+      - name: step_number
+        description: Position of the step, 1 to 5.
+        data_tests:
+          - not_null
+          - accepted_values: {arguments: {values: [1, 2, 3, 4, 5], quote: false}}
+      - name: sessions
+        description: Sessions that reached the step that day; NULL when the step wasn't recorded.
+        data_tests: [{dbt_utils.accepted_range: {arguments: {min_value: 0}}}]
+      - name: is_tracked
+        description: False when the step wasn't recorded that day (tracking_gaps seed, D20).
+        data_tests: [not_null]

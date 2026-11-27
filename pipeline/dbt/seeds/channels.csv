@@ -1,0 +1,10 @@
+channel,is_paid
+Direct,false
+Paid Search,true
+Organic Search,false
+Organic Social,false
+Organic Video,false
+Referral,false
+Email,false
+Affiliates,false
+Unassigned,false

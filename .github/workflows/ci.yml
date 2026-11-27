@@ -1,0 +1,178 @@
+# CI: lint, tests and validation on every pull request to main, with no
+# access to GCP: no secrets, no credentials, nothing deployed. Design and
+# decisions: docs/architecture.md §5 "CI" (D52–D55).
+#
+# Every version is pinned (rule: pin everything). Actions are pinned by full
+# commit SHA, with the release in a comment: a tag can be moved to other code,
+# a SHA can't. To upgrade one, resolve the new tag to its commit
+# (`gh api repos/<owner>/<action>/commits/<tag> --jq .sha`) and read its
+# action.yml for input names.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The workflow's GitHub token can only read the code.
+permissions:
+  contents: read
+
+# A new push to a pull request cancels that pull request's run still in
+# progress. Every other run (a push to main, a manual run) has a group of its
+# own: GitHub keeps only one pending run per group and cancels the older one,
+# so a shared group for main could drop a merge's result when merges land
+# quickly. Each merge gets its own result.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Every `uv sync` and `uv run` fails if uv.lock no longer matches pyproject.toml.
+  UV_LOCKED: "1"
+
+jobs:
+  api:
+    name: api (ruff, pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # One Python version everywhere. uv reads each project's own
+      # .python-version (it doesn't look in parent folders), and the API image
+      # names the version in its FROM lines, which can't read a file. Changing
+      # one without the others fails here.
+      - name: Python versions agree
+        run: |
+          want=$(cat .python-version)
+          if [ "$(cat ../pipeline/.python-version)" != "$want" ]; then
+            echo "::error::pipeline/.python-version differs from api/.python-version ($want)"
+            exit 1
+          fi
+          froms=$(grep '^FROM python:' Dockerfile || true)
+          if [ -z "$froms" ] || grep -vqF "FROM python:${want}-" <<< "$froms"; then
+            echo "::error::every FROM python: line in api/Dockerfile must use $want (api/.python-version)"
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.9"
+          # The uv download must match the checksum bundled with this setup-uv release.
+          require-checksums: "true"
+          # No python-version here: uv takes it from api/.python-version.
+          enable-cache: "true"
+          cache-dependency-glob: api/uv.lock
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      # The live tests on the real marts (`-m bigquery`) are left out by
+      # pyproject.toml's addopts: CI has no GCP access (D46).
+      - name: Tests
+        run: uv run pytest
+
+  pipeline:
+    name: pipeline (ruff, pytest, dbt parse)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: pipeline
+    env:
+      # The dbt profile requires a project. dbt parse never connects, so a
+      # placeholder will do.
+      MDP_GCP_PROJECT: ci-placeholder
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.9"
+          require-checksums: "true"
+          # No python-version here: uv takes it from pipeline/.python-version.
+          enable-cache: "true"
+          cache-dependency-glob: pipeline/uv.lock
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check
+
+      - name: Check formatting
+        run: uv run ruff format --check
+
+      - name: Tests
+        run: uv run pytest
+
+      # dbt_utils, at the version pinned in package-lock.yml.
+      - name: dbt deps
+        working-directory: pipeline/dbt
+        run: uv run dbt deps
+
+      # dbt deps quietly rewrites package-lock.yml when packages.yml changed
+      # and the new lock wasn't committed. Fail instead, as UV_LOCKED does for uv.lock.
+      - name: dbt lock file is up to date
+        working-directory: pipeline/dbt
+        run: git diff --exit-code -- package-lock.yml
+
+      # Parsing checks the project, refs, YAML and Jinja without connecting to
+      # BigQuery, so no credentials are needed. Versions are pinned, so a new
+      # warning means something in the project changed: it fails the check.
+      - name: dbt parse
+        working-directory: pipeline/dbt
+        run: uv run dbt parse --warn-error
+
+  terraform:
+    name: terraform (fmt, validate)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.17.2"
+          # Plain terraform binary: the wrapper only adds step outputs, not needed here.
+          terraform_wrapper: "false"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+      # -backend=false: no state and no credentials. -lockfile=readonly: the
+      # provider must match the committed .terraform.lock.hcl (linux_amd64
+      # checksums included), and init never rewrites it.
+      - name: Validate bootstrap
+        run: |
+          terraform -chdir=bootstrap init -backend=false -lockfile=readonly
+          terraform -chdir=bootstrap validate
+
+      - name: Validate envs/dev
+        run: |
+          terraform -chdir=envs/dev init -backend=false -lockfile=readonly
+          terraform -chdir=envs/dev validate

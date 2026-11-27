@@ -1,0 +1,36 @@
+models:
+  - name: stg_ads__spend
+    description: Ad cost per day × channel × campaign, in USD.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments: {combination_of_columns: [date, channel, campaign]}
+    columns:
+      - name: date
+        description: Day of the ad activity.
+        data_tests: [not_null]
+      - name: channel
+        description: Paid channel, with the same names as the channel seed.
+        data_tests:
+          - not_null
+          - dbt_utils.relationships_where:
+              arguments: {to: ref('channels'), field: channel, to_condition: is_paid}
+      - name: campaign
+        description: Campaign name.
+        data_tests: [not_null]
+      - name: impressions
+        description: Times the ads were shown.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: clicks
+        description: Clicks on the ads.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: spend
+        description: Cost in USD.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0}}
+      - name: loaded_at
+        description: When the row was written.

@@ -1,0 +1,10 @@
+sources:
+  - name: ads
+    description: >
+      Ad-platform costs. Here they are synthetic, written by the cost generator
+      (pipeline/src/mdp_pipeline) with the grain and metrics of a real ad export (FR-2).
+      A real connector would replace this source and stg_ads__spend only.
+    schema: raw
+    tables:
+      - name: ad_spend
+        description: One row per day × channel × campaign; the generator replaces the whole table on each run.

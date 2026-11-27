@@ -1,0 +1,38 @@
+[project]
+name = "mdp-pipeline"
+version = "0.1.0"
+description = "Data pipeline of the marketing data platform: the dbt models and the synthetic ad-cost generator."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core==1.12.7",
+    "dbt-bigquery==1.12.4",
+    "google-cloud-bigquery==3.47.0",
+]
+
+[project.scripts]
+mdp-generate = "mdp_pipeline.cli:generate_main"
+mdp-pipeline = "mdp_pipeline.cli:pipeline_main"
+
+[build-system]
+requires = ["uv_build==0.13.9"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear, simplify, ruff-specific
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+# The docs write grains as "day × channel"; keep the same sign in docstrings.
+allowed-confusables = ["×"]

@@ -1,0 +1,43 @@
+# Terraform: state and provider cache stay local (state lives in GCS);
+# .terraform.lock.hcl IS committed, to pin provider versions.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars.json
+# Project-specific values stay local; copy the committed *.example files
+# (terraform/README.md, "Configure your project")
+terraform.tfvars
+backend.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Credentials: never committed
+.env
+.env.*
+*credentials*.json
+*-key.json
+service-account*.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# Claude Code: personal settings stay local (.claude/settings.json is shared)
+.claude/settings.local.json
+
+# macOS
+.DS_Store
+
+# Claude Code: git worktrees created by forked/parallel sessions
+.claude/worktrees/

@@ -1,0 +1,65 @@
+seeds:
+  - name: channels
+    description: >
+      The channel list (D19): GA4's default channel names found in the data, and whether the
+      channel is paid. The marts have one row per day for every channel listed here (D13).
+    config:
+      column_types: {channel: string, is_paid: bool}
+    columns:
+      - name: channel
+        description: Channel name, as shown in reports.
+        data_tests: [unique, not_null]
+      - name: is_paid
+        description: True for channels that are bought (ad spend, ROAS, CPA).
+        data_tests: [not_null]
+
+  - name: channel_rules
+    description: >
+      Rules that give a session's own source its channel (D19). Rules are tried in
+      `rule_order`; the first whose two patterns both match wins. Patterns are RE2 regular
+      expressions, matched against the source and medium with NULL read as an empty string,
+      ignoring case (as GA4 does): `CPC` matches `^cpc$`.
+      Special characters are written as classes (`[.]`, `[(]`) rather than with a backslash,
+      so the patterns survive CSV and SQL string literals unchanged.
+      The last rule must match anything, so that no session is left without a channel (FR-3).
+    config:
+      column_types: {rule_order: int64, channel: string, source_pattern: string, medium_pattern: string}
+    columns:
+      - name: rule_order
+        description: Position of the rule; lower is tried first.
+        data_tests: [unique, not_null]
+      - name: channel
+        description: Channel given when the rule matches.
+        data_tests:
+          - not_null
+          - relationships: {arguments: {to: ref('channels'), field: channel}}
+      - name: source_pattern
+        description: Regular expression the source must match.
+        data_tests: [not_null]
+      - name: medium_pattern
+        description: Regular expression the medium must match.
+        data_tests: [not_null]
+
+  - name: tracking_gaps
+    description: >
+      Known tracking gaps (D20): days on which a funnel step wasn't recorded. The funnel
+      mart shows the step as not recorded on those days (`is_tracked = false`), never as 0.
+    config:
+      column_types: {step: string, start_date: date, end_date: date, reason: string}
+    data_tests:
+      - dbt_utils.expression_is_true: {arguments: {expression: "start_date <= end_date"}}
+    columns:
+      - name: step
+        description: Funnel step that wasn't recorded.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [visit, view_item, add_to_cart, begin_checkout, purchase]}
+      - name: start_date
+        description: First day of the gap.
+        data_tests: [not_null]
+      - name: end_date
+        description: Last day of the gap, included.
+        data_tests: [not_null]
+      - name: reason
+        description: What was missing, and where it was found.

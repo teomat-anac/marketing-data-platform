@@ -1,0 +1,110 @@
+# Unit tests: the D16 and D17 rules on hand-made rows. They run as small queries on
+# literal data, so they cost nothing; `dbt build` runs them before building each model.
+# Each test brings its own rule rows and settings: a client who changes the seeds or the
+# dbt variables (US-7) changes the data, not what these tests check.
+unit_tests:
+  - name: orders_follow_d17
+    description: >
+      Duplicate events of one order count once; the same ID from two users is two orders;
+      a purchase without an ID is a duplicate if its session has one with an ID, and an
+      order otherwise, with revenue 0 when no amount was recorded.
+    model: int_ga4__orders
+    given:
+      - input: ref('stg_ga4__events')
+        rows:
+          # u1: the same order recorded twice, 0.04 s apart, plus a purchase without ID
+          - {session_key: u1-1, user_pseudo_id: u1, event_name: purchase, event_at: "2020-12-01 10:00:00", transaction_id: A, purchase_revenue_usd: 20.0}
+          - {session_key: u1-1, user_pseudo_id: u1, event_name: purchase, event_at: "2020-12-01 10:00:00.04", transaction_id: A, purchase_revenue_usd: 20.0}
+          - {session_key: u1-1, user_pseudo_id: u1, event_name: purchase, event_at: "2020-12-01 10:00:01", transaction_id: null, purchase_revenue_usd: 20.0}
+          # u2: a different order whose ID collides with u1's
+          - {session_key: u2-1, user_pseudo_id: u2, event_name: purchase, event_at: "2020-12-02 09:00:00", transaction_id: A, purchase_revenue_usd: 30.555}
+          # u3: a purchase recorded without ID or amount
+          - {session_key: u3-1, user_pseudo_id: u3, event_name: purchase, event_at: "2020-12-03 09:00:00", transaction_id: null, purchase_revenue_usd: null}
+          # not a purchase
+          - {session_key: u3-1, user_pseudo_id: u3, event_name: begin_checkout, event_at: "2020-12-03 08:59:00", transaction_id: null, purchase_revenue_usd: null}
+    expect:
+      rows:
+        - {session_key: u1-1, transaction_id: A, revenue: 20.00, is_revenue_missing: false}
+        - {session_key: u2-1, transaction_id: A, revenue: 30.56, is_revenue_missing: false}
+        - {session_key: u3-1, transaction_id: null, revenue: 0, is_revenue_missing: true}
+
+  - name: sessions_follow_d16
+    description: >
+      Channels and attribution: self-referrals are ignored; a first session without a source
+      takes traffic_source; Direct inherits the last non-direct channel within the lookback
+      window only, including visits before the data range; unknown sources are Unassigned;
+      social sites beat the referral rule; a session belongs to the day it started, with its
+      orders after midnight, and sessions started outside the range are left out; sources,
+      mediums and the shop's domain match whatever their case.
+    model: int_ga4__sessions
+    overrides:
+      vars:
+        start_date: "2020-01-01"
+        end_date: "2020-06-30"
+        attribution_lookback_days: 90
+        self_referral_domains: [myshop.example]
+    given:
+      # The D19 rules, copied here so that editing the seed doesn't change this test
+      - input: ref('channel_rules')
+        rows:
+          - {rule_order: 1, channel: Direct, source_pattern: "^([(]direct[)])?$", medium_pattern: "^([(]none[)]|[(]not set[)])?$"}
+          - {rule_order: 2, channel: Paid Search, source_pattern: ".*", medium_pattern: "^cpc$"}
+          - {rule_order: 3, channel: Organic Search, source_pattern: ".*", medium_pattern: "^organic$"}
+          - {rule_order: 4, channel: Organic Social, source_pattern: "^(l[.]|m[.]|lm[.]|www[.])?(facebook|instagram|linkedin|twitter|reddit|pinterest|quora|tiktok|messenger)[.]com$|^t[.]co$|^lnkd[.]in$", medium_pattern: ".*"}
+          - {rule_order: 5, channel: Organic Video, source_pattern: "^(m[.]|www[.])?youtube[.]com$", medium_pattern: ".*"}
+          - {rule_order: 6, channel: Referral, source_pattern: ".*", medium_pattern: "^referral$"}
+          - {rule_order: 7, channel: Email, source_pattern: ".*", medium_pattern: "^email$"}
+          - {rule_order: 8, channel: Affiliates, source_pattern: ".*", medium_pattern: "^affiliate$"}
+          - {rule_order: 9, channel: Unassigned, source_pattern: ".*", medium_pattern: ".*"}
+      - input: ref('int_ga4__orders')
+        rows:
+          - {session_key: u3-2, revenue: 20.00}
+          - {session_key: u6-1, revenue: 50.00}
+          - {session_key: u10-1, revenue: 40.00}
+      - input: ref('stg_ga4__events')
+        rows:
+          # u1: the visit starts as a self-referral, then shows its real source (Paid Search)
+          - {session_key: u1-1, user_pseudo_id: u1, ga_session_number: 1, event_date: "2020-03-01", event_at: "2020-03-01 10:00:00", event_name: session_start, source: shop.myshop.example, medium: referral}
+          - {session_key: u1-1, user_pseudo_id: u1, ga_session_number: 1, event_date: "2020-03-01", event_at: "2020-03-01 10:01:00", event_name: page_view, source: google, medium: cpc}
+          # u2: first session without a source of its own takes traffic_source
+          - {session_key: u2-1, user_pseudo_id: u2, ga_session_number: 1, event_date: "2020-03-01", event_at: "2020-03-01 11:00:00", event_name: session_start, first_user_source: google, first_user_medium: organic}
+          # u3: Email, then 30 days later a session without source: inherits Email, with its order
+          - {session_key: u3-1, user_pseudo_id: u3, ga_session_number: 1, event_date: "2020-03-01", event_at: "2020-03-01 12:00:00", event_name: session_start, source: newsletter, medium: email}
+          - {session_key: u3-2, user_pseudo_id: u3, ga_session_number: 2, event_date: "2020-03-31", event_at: "2020-03-31 12:00:00", event_name: session_start}
+          - {session_key: u3-2, user_pseudo_id: u3, ga_session_number: 2, event_date: "2020-03-31", event_at: "2020-03-31 12:05:00", event_name: purchase}
+          # u4: Affiliates, then 121 days later a session without source: too late, stays Direct
+          - {session_key: u4-1, user_pseudo_id: u4, ga_session_number: 1, event_date: "2020-01-01", event_at: "2020-01-01 12:00:00", event_name: session_start, source: partners, medium: affiliate}
+          - {session_key: u4-2, user_pseudo_id: u4, ga_session_number: 2, event_date: "2020-05-01", event_at: "2020-05-01 12:00:00", event_name: session_start}
+          # u5: an obfuscated source matches no named rule
+          - {session_key: u5-1, user_pseudo_id: u5, ga_session_number: 3, event_date: "2020-03-01", event_at: "2020-03-01 13:00:00", event_name: session_start, source: (data deleted), medium: (data deleted)}
+          # u6: starts on the last day, purchases after midnight; the next session starts after the range
+          - {session_key: u6-1, user_pseudo_id: u6, ga_session_number: 1, event_date: "2020-06-30", event_at: "2020-06-30 23:59:00", event_name: session_start, source: (direct), medium: (none)}
+          - {session_key: u6-1, user_pseudo_id: u6, ga_session_number: 1, event_date: "2020-07-01", event_at: "2020-07-01 00:05:00", event_name: purchase, source: (direct), medium: (none)}
+          - {session_key: u6-2, user_pseudo_id: u6, ga_session_number: 2, event_date: "2020-07-01", event_at: "2020-07-01 10:00:00", event_name: session_start, source: google, medium: cpc}
+          # u7: first session whose traffic_source is the shop itself: Direct
+          - {session_key: u7-1, user_pseudo_id: u7, ga_session_number: 1, event_date: "2020-03-01", event_at: "2020-03-01 14:00:00", event_name: session_start, first_user_source: shop.myshop.example, first_user_medium: referral}
+          # u8: a social site tagged as a referral is Organic Social (the social rule comes first)
+          - {session_key: u8-1, user_pseudo_id: u8, ga_session_number: 4, event_date: "2020-03-01", event_at: "2020-03-01 15:00:00", event_name: session_start, source: m.facebook.com, medium: referral}
+          # u9: Email before the range passes its channel to a Direct session inside it, but isn't counted
+          - {session_key: u9-1, user_pseudo_id: u9, ga_session_number: 1, event_date: "2019-12-20", event_at: "2019-12-20 12:00:00", event_name: session_start, source: newsletter, medium: email}
+          - {session_key: u9-2, user_pseudo_id: u9, ga_session_number: 2, event_date: "2020-01-10", event_at: "2020-01-10 12:00:00", event_name: session_start}
+          # u10: starts the day before the range and buys after midnight: not counted at all
+          - {session_key: u10-1, user_pseudo_id: u10, ga_session_number: 1, event_date: "2019-12-31", event_at: "2019-12-31 23:50:00", event_name: session_start, source: google, medium: cpc}
+          - {session_key: u10-1, user_pseudo_id: u10, ga_session_number: 1, event_date: "2020-01-01", event_at: "2020-01-01 00:10:00", event_name: purchase, source: google, medium: cpc}
+          # u11: upper case: a self-referral to skip, then a paid click tagged CPC
+          - {session_key: u11-1, user_pseudo_id: u11, ga_session_number: 2, event_date: "2020-03-01", event_at: "2020-03-01 16:00:00", event_name: session_start, source: WWW.MyShop.Example, medium: referral}
+          - {session_key: u11-1, user_pseudo_id: u11, ga_session_number: 2, event_date: "2020-03-01", event_at: "2020-03-01 16:01:00", event_name: page_view, source: Google, medium: CPC}
+    expect:
+      rows:
+        - {session_key: u1-1, session_date: "2020-03-01", own_channel: Paid Search, channel: Paid Search, orders: 0, reached_purchase: false}
+        - {session_key: u2-1, session_date: "2020-03-01", own_channel: Organic Search, channel: Organic Search, orders: 0, reached_purchase: false}
+        - {session_key: u3-1, session_date: "2020-03-01", own_channel: Email, channel: Email, orders: 0, reached_purchase: false}
+        - {session_key: u3-2, session_date: "2020-03-31", own_channel: Direct, channel: Email, orders: 1, reached_purchase: true}
+        - {session_key: u4-1, session_date: "2020-01-01", own_channel: Affiliates, channel: Affiliates, orders: 0, reached_purchase: false}
+        - {session_key: u4-2, session_date: "2020-05-01", own_channel: Direct, channel: Direct, orders: 0, reached_purchase: false}
+        - {session_key: u5-1, session_date: "2020-03-01", own_channel: Unassigned, channel: Unassigned, orders: 0, reached_purchase: false}
+        - {session_key: u6-1, session_date: "2020-06-30", own_channel: Direct, channel: Direct, orders: 1, reached_purchase: true}
+        - {session_key: u7-1, session_date: "2020-03-01", own_channel: Direct, channel: Direct, orders: 0, reached_purchase: false}
+        - {session_key: u8-1, session_date: "2020-03-01", own_channel: Organic Social, channel: Organic Social, orders: 0, reached_purchase: false}
+        - {session_key: u9-2, session_date: "2020-01-10", own_channel: Direct, channel: Email, orders: 0, reached_purchase: false}
+        - {session_key: u11-1, session_date: "2020-03-01", own_channel: Paid Search, channel: Paid Search, orders: 0, reached_purchase: false}
